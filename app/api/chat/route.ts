@@ -20,16 +20,11 @@ type ModelCache = {
 }
 
 
-// ── Singleton AstraDB client ──────────────────────────────────────────────────
-// Initialized once on cold start — reused across all requests.
-// Same pattern as lib/prisma.ts — no new TCP connection per request.
 const astraClient = new DataAPIClient(ASTRA_DB_APPLICATION_TOKEN!);
 const db = astraClient.db(ASTRA_DB_API_ENDPOINT!, {
   keyspace: ASTRA_DB_NAMESPACE!,
 });
-// ── Singleton Gemini clients ──────────────────────────────────────────────────
-// @google/generative-ai — embeddings only (no AI SDK equivalent yet)
-// @ai-sdk/google        — generation via streamText
+
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY!);
 const embeddingModel = genAI.getGenerativeModel({
   model: "gemini-embedding-001",
@@ -89,9 +84,7 @@ type ChatMessage = {
 
 
 // ── History helper ────────────────────────────────────────────────────────────
-// Called inside onFinish — after full stream is delivered to client.
-// Failure is logged but never re-thrown — a DB write error must never
-// crash the chat response the user already received.
+
 async function saveHistory(userId: string, messages: ChatMessage[]) {
   try {
     await prisma.chatHistory.upsert({
@@ -113,13 +106,13 @@ async function saveHistory(userId: string, messages: ChatMessage[]) {
 // ── POST ──────────────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
   try {
-    // 1️⃣ Auth guard
+    // 1️ Auth guard
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session?.user) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 2️⃣ Rate limit
+    // 2️ Rate limit
     if (isRateLimited(session.user.id)) {
       return Response.json(
         { error: "Too many requests. Please wait a moment." },
@@ -127,7 +120,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3️⃣ Validate input
+    // 3️ Validate input
     const body = await req.json();
     const { question, history } = body;
 
@@ -146,11 +139,12 @@ export async function POST(req: Request) {
         )
       : [];
 
-    // 4️⃣ Embed question — singleton embeddingModel
+    // 4️ Embed question — singleton embeddingModel
+
     const embeddingRes = await embeddingModel.embedContent(question);
     const vector = embeddingRes.embedding.values;
 
-    // 5️⃣ Vector search AstraDB — singleton db
+    // 5️ Vector search AstraDB — singleton db
     const collection = await db.collection(ASTRA_DB_COLLECTION!);
     const docs = await collection
       .find({}, { sort: { $vector: vector }, limit: 6 })
@@ -158,9 +152,7 @@ export async function POST(req: Request) {
 
     const docContext = docs.map((d) => d.text).join("\n\n");
 
-    // 6️⃣ Build conversation history for AI SDK
-    // Cap at last 10 messages (~5 turns) to stay within token budget
-    // AI SDK uses "user" | "assistant" natively — no "model" mapping needed
+    // 6️ Build conversation history for AI SDK
     const MAX_HISTORY = 10;
     const conversationHistory = safeHistory
       .slice(-MAX_HISTORY)
@@ -169,8 +161,7 @@ export async function POST(req: Request) {
         content: m.content,
       }));
 
-    // 7️⃣ Build new user message — constructed here so onFinish can reference it
-    // without re-reading the already-consumed request body
+    // 7️ Build new user message — constructed here so onFinish can reference it
     const timestamp = new Date().toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
@@ -185,13 +176,9 @@ export async function POST(req: Request) {
     // Capture userId for use inside onFinish closure
     const userId = session.user.id;
 
- 
 
 
-
-    // 8️⃣ Stream response
-    // onFinish fires AFTER full response is streamed to client —
-    // saves complete history atomically with no race condition
+    // 8️ Stream response
    function runChat(modelId: string){
     return streamText({
       model: google(modelId),
@@ -230,9 +217,7 @@ export async function POST(req: Request) {
         { role: "user", content: question },
       ],
 
-      // Runs after the complete response has been streamed to the client.
-      // `text` = full assembled assistant reply as a single string.
-      // Saves: all prior history + new user message + new assistant message.
+
       onFinish: async ({ text }) => {
         const newAssistantMessage: ChatMessage = {
           role: "assistant",
@@ -250,7 +235,6 @@ export async function POST(req: Request) {
       },
     });
 }
-   
   const modelId = await resolveModel();
   const result = runChat(modelId);
 
