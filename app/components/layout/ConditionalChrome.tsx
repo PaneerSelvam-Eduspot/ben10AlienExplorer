@@ -13,7 +13,7 @@ const RagIcon = dynamic(() => import('../chat/RagIcon'));
 
 export default function ConditionalChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const hideChrome = pathname === '/login' || pathname === '/dashboard';
+  const hideChrome = pathname === '/login' || pathname === '/dashboard' || pathname == '/terms' || pathname == '/privacy';
 
   return (
     <>
