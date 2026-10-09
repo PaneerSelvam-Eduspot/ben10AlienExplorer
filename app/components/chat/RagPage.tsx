@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -18,16 +19,15 @@ import { useSession } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 type Message = {
   role: "user" | "assistant";
-  
   content: string;
   timestamp?: string;
   isError?: boolean;
 };
+
 const MotionImage = motion(Image);
-// ── Error classifier ──────────────────────────────────────────────────────────
+
 function getErrorMessage(status: number): string {
   switch (status) {
     case 401:
@@ -36,7 +36,6 @@ function getErrorMessage(status: number): string {
       return "You've sent too many messages. Please wait a moment before trying again.";
     case 400:
       return "Your message couldn't be processed. Please try rephrasing.";
-    case 500:
     default:
       return "Something went wrong on our end. Please try again shortly.";
   }
@@ -45,28 +44,34 @@ function getErrorMessage(status: number): string {
 const dotVariants = {
   animate: {
     opacity: [0.3, 1, 0.3],
-  }        
-}
+  },
+};
 
-// ── LoadingBubble ─────────────────────────────────────────────────────────────
 const LoadingBubble = () => (
   <div className="flex gap-3 items-start">
     <div className="h-7 w-7 bg-[#006A4E] shrink-0 rounded-full overflow-hidden">
-      <Image src="/ben10.png" alt="assist10" width={7} height={7} className="w-full h-full object-cover" />
+      <Image
+        src="/ben10.png"
+        alt="Assist10"
+        width={28}
+        height={28}
+        className="w-full h-full object-cover"
+      />
     </div>
+
     <div className="bg-gray-800/50 border border-gray-700/50 rounded-lg p-3 flex items-center gap-2">
-      <div className="flex gap-1"> 
-        {[0,1,2].map((i) => (
-          <motion.span 
-           key={i}
-           className="h-2 w-2 rounded-full bg-green-500"
-           variants={dotVariants}
-           animate='animate'
-           transition={{
-            duration: 1,
-            repeat: Infinity,
-            delay: i * 0.2,
-           }}
+      <div className="flex gap-1">
+        {[0, 1, 2].map((i) => (
+          <motion.span
+            key={i}
+            className="h-2 w-2 rounded-full bg-green-500"
+            variants={dotVariants}
+            animate="animate"
+            transition={{
+              duration: 1,
+              repeat: Infinity,
+              delay: i * 0.2,
+            }}
           />
         ))}
       </div>
@@ -74,46 +79,77 @@ const LoadingBubble = () => (
   </div>
 );
 
-function TypewriterText({ text }: { text: string }) {
+function TypewriterText({
+  text,
+  onReveal,
+}: {
+  text: string;
+  onReveal?: () => void;
+}) {
   const [displayedText, setDisplayedText] = useState("");
   const textRef = useRef(text);
   const indexRef = useRef(0);
 
-  // Keep textRef pointing at the latest text without mutating it during render.
   useEffect(() => {
     textRef.current = text;
+
+    // Restart if the content becomes shorter than what was revealed.
+    if (text.length < indexRef.current) {
+      indexRef.current = 0;
+      setDisplayedText("");
+    }
   }, [text]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (indexRef.current < textRef.current.length) {
-        indexRef.current += 1;
-        setDisplayedText(textRef.current.slice(0, indexRef.current));  // how much of the string, up to where?
-      }
-    }, 20); // ~20ms per character — tweak to taste
+      const total = textRef.current.length;
+      const backlog = total - indexRef.current;
+
+      if (backlog <= 0) return;
+
+      const step = Math.max(1, Math.ceil(backlog / 15));
+      indexRef.current = Math.min(total, indexRef.current + step);
+
+      setDisplayedText(
+        textRef.current.slice(0, indexRef.current)
+      );
+    }, 20);
 
     return () => clearInterval(interval);
-  }, []); // empty array — set up ONCE, never restart
+  }, []);
 
-  return <p className="text-sm whitespace-pre-wrap break-words">{displayedText}</p>;
+  useEffect(() => {
+    onReveal?.();
+  }, [displayedText, onReveal]);
+
+  return (
+    <p className="text-sm whitespace-pre-wrap break-words">
+      {displayedText}
+    </p>
+  );
 }
 
-// ── Bubble ────────────────────────────────────────────────────────────────────
 const Bubble = ({
   message,
   userName,
-  isStreaming
+  animate,
+  onReveal,
 }: {
   message: Message;
   userName?: string | null;
-  isStreaming: boolean;
+  animate: boolean;
+  onReveal?: () => void;
 }) => {
   const { content, role, timestamp, isError } = message;
   const isUser = role === "user";
   const initial = userName?.charAt(0)?.toUpperCase() ?? "?";
 
   return (
-    <div className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}>
+    <div
+      className={`flex gap-3 ${
+        isUser ? "justify-end" : "justify-start"
+      }`}
+    >
       {!isUser && (
         <motion.div
           className="h-7 w-7 bg-[#006A4E] shrink-0 rounded-full overflow-hidden"
@@ -121,7 +157,13 @@ const Bubble = ({
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.2 }}
         >
-          <Image src="/ben10.png" alt="assist10" height={28} width={28} className="w-full h-full object-cover" />
+          <Image
+            src="/ben10.png"
+            alt="Assist10"
+            height={28}
+            width={28}
+            className="w-full h-full object-cover"
+          />
         </motion.div>
       )}
 
@@ -131,8 +173,8 @@ const Bubble = ({
             isUser
               ? "bg-black/70 text-white"
               : isError
-              ? "bg-amber-900/30 text-amber-200 border border-amber-700/50"
-              : "bg-gray-800/50 text-gray-100 border border-gray-700/50"
+                ? "bg-amber-900/30 text-amber-200 border border-amber-700/50"
+                : "bg-gray-800/50 text-gray-100 border border-gray-700/50"
           }`}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -141,13 +183,28 @@ const Bubble = ({
           {isError && (
             <div className="flex items-center gap-2 mb-1">
               <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-              <span className="text-xs text-amber-400 font-medium">Notice</span>
+              <span className="text-xs text-amber-400 font-medium">
+                Notice
+              </span>
             </div>
           )}
-          {isStreaming ? <TypewriterText text={content}/> : <p className="text-sm whitespace-pre-wrap break-words">{content}</p>}
+
+          {animate ? (
+            <TypewriterText
+              text={content}
+              onReveal={onReveal}
+            />
+          ) : (
+            <p className="text-sm whitespace-pre-wrap break-words">
+              {content}
+            </p>
+          )}
         </motion.div>
+
         {timestamp && (
-          <span className="text-xs text-gray-500 mt-1 block">{timestamp}</span>
+          <span className="text-xs text-gray-500 mt-1 block">
+            {timestamp}
+          </span>
         )}
       </div>
 
@@ -158,15 +215,20 @@ const Bubble = ({
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.2 }}
         >
-          <span className="text-xs text-white font-bold">{initial}</span>
+          <span className="text-xs text-white font-bold">
+            {initial}
+          </span>
         </motion.div>
       )}
     </div>
   );
 };
 
-// ── LoginPrompt ───────────────────────────────────────────────────────────────
-const LoginPrompt = ({ onClose }: { onClose?: () => void }) => {
+const LoginPrompt = ({
+  onClose,
+}: {
+  onClose?: () => void;
+}) => {
   const router = useRouter();
 
   return (
@@ -174,12 +236,17 @@ const LoginPrompt = ({ onClose }: { onClose?: () => void }) => {
       <div className="bg-green-600/10 rounded-full p-6 border border-green-500">
         <Lock className="h-12 w-12 text-green-500" />
       </div>
+
       <div className="text-center space-y-3">
-        <h2 className="text-2xl font-bold text-white">Authentication Required</h2>
+        <h2 className="text-2xl font-bold text-white">
+          Authentication Required
+        </h2>
         <p className="text-sm text-gray-400 max-w-md">
-          Please log in to access Assist10 and get personalized help about Ben 10 aliens!
+          Please log in to access Assist10 and get personalized help
+          about Ben 10 aliens!
         </p>
       </div>
+
       <div className="flex gap-3">
         <Button
           onClick={() => router.push("/login")}
@@ -187,6 +254,7 @@ const LoginPrompt = ({ onClose }: { onClose?: () => void }) => {
         >
           Log In
         </Button>
+
         <Button
           onClick={onClose}
           variant="outline"
@@ -199,163 +267,218 @@ const LoginPrompt = ({ onClose }: { onClose?: () => void }) => {
   );
 };
 
-// ── RagPage ───────────────────────────────────────────────────────────────────
-export default function RagPage({ onClose }: { onClose?: () => void }) {
+export default function RagPage({
+  onClose,
+}: {
+  onClose?: () => void;
+}) {
   const { data: session, isPending } = useSession();
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [typingIndex, setTypingIndex] = useState<number | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = useCallback(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "auto" });
+  }, []);
 
   const isLoggedIn = !!session?.user;
   const userId = session?.user?.id;
   const userName = session?.user?.name ?? null;
 
-  // ── Load chat history on mount ──────────────────────────────────────────────
+  // Load chat history.
   useEffect(() => {
     if (!isLoggedIn || !userId) {
       setMessages([]);
       return;
     }
+
+    let cancelled = false;
+
     const loadChatHistory = async () => {
       try {
         const response = await fetch("/api/chat/history");
-        if (response.ok) {
-          const data = await response.json();
-          setMessages(data.messages || []);
+
+        if (!response.ok) {
+          throw new Error(`History request failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (!cancelled) {
+          setMessages(
+            Array.isArray(data.messages) ? data.messages : []
+          );
         }
       } catch (error) {
-        console.error("Failed to load chat history:", error);
+        if (!cancelled) {
+          console.error("Failed to load chat history:", error);
+        }
       }
     };
-    loadChatHistory();
+
+    void loadChatHistory();
+
+    return () => {
+      cancelled = true;
+    };
   }, [isLoggedIn, userId]);
 
-  // ── Auto-scroll on every message/token update ───────────────────────────────
+  // Auto-scroll when messages change.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ── Send message ────────────────────────────────────────────────────────────
+  // Send a message and stream the response.
   const sendMessage = async (text: string) => {
-    if (!text.trim() || !isLoggedIn || loading) return;
+    const question = text.trim();
+
+    if (!question || !isLoggedIn || loading) return;
 
     const timestamp = new Date().toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
 
-    const userMessage: Message = { role: "user", content: text, timestamp };
-
-    // Snapshot BEFORE pushing userMessage — this is the history context for the server
     const historySnapshot = [...messages];
 
-    setMessages((prev) => [...prev, userMessage]);
+    const userMessage: Message = {
+      role: "user",
+      content: question,
+      timestamp,
+    };
+
+    // This index identifies the assistant placeholder.
+    const assistantIndex = historySnapshot.length + 1;
+
+    setMessages((prev) => [
+      ...prev,
+      userMessage,
+      {
+        role: "assistant",
+        content: "",
+        timestamp,
+      },
+    ]);
+
+    setTypingIndex(assistantIndex);
     setInput("");
     setLoading(true);
 
+    const updateAssistantMessage = (
+      content: string,
+      isError = false
+    ) => {
+      setMessages((prev) =>
+        prev.map((message, index) =>
+          index === assistantIndex
+            ? {
+                role: "assistant",
+                content,
+                timestamp,
+                ...(isError ? { isError: true } : {}),
+              }
+            : message
+        )
+      );
+    };
+
     try {
-      const res = await fetch("/api/chat", {
+      const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-          question: text,
+          question,
           history: historySnapshot,
         }),
       });
 
-      // Non-2xx — server returns JSON error body, parse and show specifically
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: errorData.error ?? getErrorMessage(res.status),
-            timestamp,
-            isError: true,
-          },
-        ]);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+
+        updateAssistantMessage(
+          typeof errorData.error === "string"
+            ? errorData.error
+            : getErrorMessage(response.status),
+          true
+        );
+
         return;
       }
 
-      // ── Stream reading ──────────────────────────────────────────────────────
-      // toTextStreamResponse() sends raw plain text chunks — no protocol prefix.
-      // Push an empty assistant bubble immediately, then fill it token by token.
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "", timestamp },
-      ]);
+      if (!response.body) {
+        throw new Error("The response has no readable stream.");
+      }
 
-      const reader = res.body!.getReader();
+      // Expects a raw plain-text stream from the API.
+      const reader = response.body.getReader();
       const decoder = new TextDecoder();
+
       let fullText = "";
 
       while (true) {
         const { done, value } = await reader.read();
+
         if (done) break;
 
-        // Raw text chunk — append directly, no `0:` prefix to strip
-        fullText += decoder.decode(value, { stream: true });
-
-        // Update the last message (the streaming assistant bubble) in place
-        setMessages((prev) => {
-          const updated = [...prev];
-          updated[updated.length - 1] = {
-            role: "assistant",
-            content: fullText,
-            timestamp,
-          };
-          return updated;
+        fullText += decoder.decode(value, {
+          stream: true,
         });
+
+        updateAssistantMessage(fullText);
       }
 
-      // ── Flush decoder at end of stream ──────────────────────────────────────
-      // decode() with no args flushes any remaining bytes held in the decoder buffer
-      const tail = decoder.decode();
-      if (tail) {
-        fullText += tail;
-        setMessages((prev) => {
-          const updated = [...prev];
-          updated[updated.length - 1] = {
-            role: "assistant",
-            content: fullText,
-            timestamp,
-          };
-          return updated;
-        });
-      }
+      fullText += decoder.decode();
+      updateAssistantMessage(fullText);
 
-    } catch {
-      // Network-level failure — offline, DNS, etc.
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: "Unable to reach the server. Please check your connection.",
-          timestamp,
-          isError: true,
-        },
-      ]);
+      if (!fullText.trim()) {
+        updateAssistantMessage(
+          "I couldn't generate a response. Please try again.",
+          true
+        );
+      }
+    } catch (error) {
+      console.error("Failed to send chat message:", error);
+
+      updateAssistantMessage(
+        "Unable to reach the server. Please check your connection and try again.",
+        true
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Clear chat ──────────────────────────────────────────────────────────────
+  // Clear the conversation.
   const handleClearChat = async () => {
+    if (loading) return;
+
+    setTypingIndex(null);
     setMessages([]);
-    if (isLoggedIn) {
-      try {
-        await fetch("/api/chat/history", { method: "DELETE" });
-      } catch (error) {
-        console.error("Failed to clear chat history:", error);
+
+    if (!isLoggedIn) return;
+
+    try {
+      const response = await fetch("/api/chat/history", {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        console.error(
+          "Failed to clear chat history:",
+          response.status
+        );
       }
+    } catch (error) {
+      console.error("Failed to clear chat history:", error);
     }
   };
 
-  // ── Render guards ───────────────────────────────────────────────────────────
   if (isPending) {
     return (
       <div className="h-[60dvh] w-[min(60vh,calc(100vw-2rem))] radial-bg flex items-center justify-center rounded-xl z-50 fixed bottom-5 right-5">
@@ -372,25 +495,26 @@ export default function RagPage({ onClose }: { onClose?: () => void }) {
     );
   }
 
-  // ── Main render ─────────────────────────────────────────────────────────────
   return (
     <div className="h-[60dvh] w-[min(60vh,calc(100vw-2rem))] border border-[#00FF00]/30 radial-bg-dark flex flex-col rounded-xl z-50 fixed bottom-5 right-5">
-
-      {/* Top Bar */}
+      {/* Top bar */}
       <header className="border-b border-gray-800 px-4 py-3 flex items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-2">
           <Clock className="h-4 w-4 text-gray-500" />
           <span className="text-sm text-gray-400">Today</span>
         </div>
+
         <div className="flex flex-row gap-4">
           <button
             type="button"
             onClick={handleClearChat}
+            disabled={loading}
             aria-label="New Chat"
-            className="text-gray-500 hover:text-green-500 transition-colors"
+            className="text-gray-500 hover:text-green-500 disabled:opacity-50 transition-colors"
           >
             <SquarePenIcon className="h-4 w-4" />
           </button>
+
           <button
             type="button"
             onClick={() => onClose?.()}
@@ -422,12 +546,15 @@ export default function RagPage({ onClose }: { onClose?: () => void }) {
                     />
                   </div>
                 </div>
+
                 <h2 className="md:text-2xl font-bold text-white">
                   Meet Assist10!
                 </h2>
+
                 <p className="text-sm md:text-base text-gray-400 max-w-md">
                   Ask me anything about Ben 10 alien explorer!
                 </p>
+
                 {userName && (
                   <p className="text-xs text-green-500">
                     Welcome back, {userName}!
@@ -437,38 +564,52 @@ export default function RagPage({ onClose }: { onClose?: () => void }) {
             </div>
           ) : (
             <div className="space-y-6 pb-4">
-              {messages.map((m, i) => {
-                const isStreaming = loading === true && i === messages.length - 1 && m.role === "assistant";
-                return <Bubble key={i} message={m} userName={userName} isStreaming={isStreaming} />
+              {messages.map((message, index) => {
+                const isWaitingForResponse =
+                  loading &&
+                  index === typingIndex &&
+                  message.role === "assistant" &&
+                  message.content === "";
+
+                if (isWaitingForResponse) {
+                  return <LoadingBubble key={index} />;
+                }
+
+                return (
+                  <Bubble
+                    key={index}
+                    message={message}
+                    userName={userName}
+                    animate={index === typingIndex}
+                    onReveal={scrollToBottom}
+                  />
+                );
               })}
-              {/* LoadingBubble only shows between send and first token arriving */}
-              {loading && messages[messages.length - 1]?.role !== "assistant" && (
-                <LoadingBubble />
-              )}
-              {/* Scroll anchor */}
+
               <div ref={bottomRef} />
             </div>
           )}
         </div>
       </ScrollArea>
 
-      {/* Input Area */}
+      {/* Input area */}
       <div className="border-t border-gray-800 p-4 shrink-0">
         <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            sendMessage(input);
+          onSubmit={(event) => {
+            event.preventDefault();
+            void sendMessage(input);
           }}
           className="md:max-w-3xl mx-auto"
         >
           <div className="flex gap-2 radial-bg-dark border border-gray-700 rounded-full p-2 focus-within:border-green-500/50 transition-colors">
             <Input
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(event) => setInput(event.target.value)}
               placeholder="Ask me about something..."
               disabled={loading}
               className="flex-1 bg-transparent border-0 focus-visible:ring-0 text-white placeholder:text-gray-500"
             />
+
             <Button
               type="submit"
               disabled={loading || !input.trim()}
