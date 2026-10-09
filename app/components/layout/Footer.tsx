@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 
 
 export default function Footer() {
@@ -23,15 +24,16 @@ export default function Footer() {
 
       if(!res.ok){
         const string = await res.json();
-        alert('The submission was failed!');
+        toast.error('The submission was failed!');
       }
       else{
         setEmail('');
         setFeedback('');
-        alert('Thank you for your feedback!');
+        toast.success('Thank you for your feedback!');
       }
     } catch (error) {
       console.error("Error saving feedback", error);
+      toast.error('An unexpected error occured.');
     } finally {
       setIsSubmitting(false);
     }
