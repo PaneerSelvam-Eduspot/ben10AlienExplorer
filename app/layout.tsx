@@ -8,6 +8,7 @@ import { AlienProvider } from '@/lib/Store';
 import { LoadingProvider } from './components/layout/LoadingProvider';
 import ConditionalChrome from './components/layout/ConditionalChrome';
 import { Metadata } from 'next';
+import { Toaster } from 'sonner';
 
 
 export const metadata: Metadata = {
@@ -24,6 +25,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <LoadingProvider>
           <main>
           <AlienProvider>
+            <Toaster />
             <ConditionalChrome>{children}</ConditionalChrome> 
           </AlienProvider>
           </main>
