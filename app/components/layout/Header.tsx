@@ -18,7 +18,7 @@ const navItems = [
   { name: "Explorer", icon: faCompass, href: "/explorer" },
   { name: "Omnitrix Directory", icon: faAtom, href: "/omnitrix" },
 ];
-const MotionImage = motion(Image);
+const MotionImage = motion.create(Image);
 
 export default function Header() {
   const pathname = usePathname();
