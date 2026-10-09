@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "@/lib/auth-client";
 import { useEffect } from "react";
-import { Button } from "@/components/ui/button";
 import ExplorerBackground from "../components/backgrounds/ExplorerBackground";
 import { motion, type Variants } from 'framer-motion';
 
@@ -35,9 +34,7 @@ export default function DashboardPage() {
 
   const { user } = session;
 
-  // Parent controls the stagger timing; each child only declares its own
-  // "from -> to" shape via `item`, so the sequence is defined once here
-  // instead of a separate delay hand-tuned on every element.
+
   const container = {
     hidden: { opacity: 0 },
     visible: {
